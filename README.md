@@ -1,0 +1,1 @@
+Requires WebService::Coinbase
