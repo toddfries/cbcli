@@ -18,12 +18,16 @@ use strict;
 use warnings;
 
 use Data::Dumper;
+use Getopt::Std;
 use LWP::Authen::OAuth2;
 use JSON;
 
 our $cbversion = "2017-01-09";
 
 our $json = JSON->new->allow_nonref;
+
+our $opt_v = 0;
+getopts('v');
 
 my ($token_string,$id,$secret,$token_refresh);
 my $conf = "$ENV{'HOME'}/.coinbase.conf";
@@ -106,13 +110,17 @@ $token_string = $oauth2->token_string;
 #printf "Token string: %s\n", $token_string;
 
 if ($oauth2->can_refresh_tokens()) {
-	print "Seems possible to refresh tokens!\n";
+	if ($opt_v > 0) {
+		print "Seems possible to refresh tokens!\n";
+	}
 	my $ret = $oauth2->should_refresh();
-	#if ($ret) {
-	#	print "We shold refresh our tokens..\n";
-	#} else {
-	#	print "No need to refresh tokens yet.\n";
-	#}
+	if ($opt_v > 0) {
+		if ($ret) {
+			print "We shold refresh our tokens..\n";
+		} else {
+			print "No need to refresh tokens yet.\n";
+		}
+	}
 } else {
 	print "Looks not possible to refresh tokens..\n";
 }
@@ -127,19 +135,24 @@ my $res;
 my $limit = 2;     # 25 (default), 0 - 100
 my $order = "asc"; # desc (newest 1st, default), asc (oldest 1st)
 
-$headers{'limit'} = $limit;
-$headers{'order'} = $order;
-
 my $last_cursor_pos = 0;
 my $last_cursor_id;
+my @accts;
 while(1) {
-	my %this_round_headers = %headers;
-	printf "Starting round at position %d\n", $last_cursor_pos;
-	if (defined($last_cursor_id)) {
-		$this_round_headers{'starting_after'} = $last_cursor_id;
+	if ($opt_v > 0) {
+		printf "Starting round after %d items", $last_cursor_pos;
+		if (defined($last_cursor_id)) {
+			printf " after id %s", $last_cursor_id;
+		}
+		print "\n";
 	}
 
-$res = $oauth2->get($urlapibase . '/accounts', %this_round_headers);
+	my $parms = "?limit=${limit}&order=${order}";
+	if (defined($last_cursor_id)) {
+		$parms.="&starting_after=${last_cursor_id}";
+	}
+
+$res = $oauth2->get($urlapibase . '/accounts'.${parms}, %headers);
 if (!defined($res)) {
 	die "get /accounts failed!";
 }
@@ -161,7 +174,7 @@ if (defined($parsed->{data})) {
 		if (ref($k) eq "ARRAY") {
 			foreach my $l (sort by_cur_name @{$k}) {
 				#printf "data: found a %s\n", ref($l);
-				show_acct($l);
+				push @accts,$l;
 				$last_cursor_pos++;
 				$last_cursor_id=$l->{id};
 			}
@@ -171,6 +184,7 @@ if (defined($parsed->{data})) {
 		$i++;
 	}
 }
+if ($opt_v > 0) {
 if (defined($parsed->{pagination})) {
 	foreach my $k (keys %{$parsed->{pagination}}) {
 		my $val = $parsed->{pagination}->{$k};
@@ -180,11 +194,16 @@ if (defined($parsed->{pagination})) {
 		printf "pagination %s : %s\n", $k, $val;
 	}
 }
+}
 
 if (!defined($parsed->{pagination}->{next_uri})) {
 	last;
 }
 
+}
+
+foreach my $a (sort by_cur_name @accts) {
+	show_acct($a);
 }
 
 printf "Processed %d accounts\n", $last_cursor_pos;
