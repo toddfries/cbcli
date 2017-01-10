@@ -17,10 +17,13 @@
 use strict;
 use warnings;
 
-use LWP::Authen::OAuth2;
 use Data::Dumper;
+use LWP::Authen::OAuth2;
+use JSON;
 
 our $cbversion = "2017-01-09";
+
+our $json = JSON->new->allow_nonref;
 
 my ($token_string,$id,$secret,$token_refresh);
 my $conf = "$ENV{'HOME'}/.coinbase.conf";
@@ -94,13 +97,13 @@ if ($@) {
 	exit(1);
 }
 
-print(Dumper $res);
+#print(Dumper $res);
 print "\n";
 }
 
 $token_string = $oauth2->token_string;
 
-printf "Token string: %s\n", $token_string;
+#printf "Token string: %s\n", $token_string;
 
 if ($oauth2->can_refresh_tokens()) {
 	print "Seems possible to refresh tokens!\n";
@@ -118,48 +121,89 @@ $headers{'CB-VERSION'}=$cbversion;
 
 my $res;
 $res = $oauth2->get($urlapibase . '/user/auth', %headers);
-print "res is a ".ref($res)."\n";
-print $res->decoded_content."\n";
-#print(Dumper $res);
 
 $res = $oauth2->get($urlapibase . '/accounts', %headers);
 if (!defined($res)) {
 	die "get /accounts failed!";
 }
-if ($res->is_success) {
-	print $res->decoded_content."\n";
-} else {
+if (! $res->is_success) {
 	die $res->status_line;
+}
+
+my $parsed = parse_json($res->decoded_content, 0);
+printf "parsed is a %s\n", $parsed;
+
+if (defined($parsed->{pagination})) {
+	foreach my $k (keys %{$parsed->{pagination}}) {
+		my $val = $parsed->{pagination}->{$k};
+		if (!defined($val)) {
+			$val = "</dev/null>";
+		}
+		printf "pagination %s : %s\n", $k, $val;
+	}
+}
+if (defined($parsed->{data})) {
+	foreach my $k ($parsed->{data}) {
+		if (ref($k) eq "HASH") {
+			foreach my $l (keys %{$k}) {
+				printf "data: %s : %s\n", $l, $k->{$l};
+			}
+			next;
+		}
+		if (ref($k) eq "ARRAY") {
+			foreach my $l (sort by_cur_name @{$k}) {
+				#printf "data: found a %s\n", ref($l);
+				show_acct($l);
+			}
+			next;
+		}
+		printf "data: element is a %s\n", ref($k);
+		$i++;
+	}
 }
 
 1;
 
 sub save_tokens {
 	my ($token_string,$id,$secret) = @_;
-	# $token_string = {
-	#    "create_time"   : 1484000626,
-	#    "token_type"    : "bearer",
-	#    "expires_in"    : 7200,
-	#    "_class"        : "LWP::Authen::OAuth2::AccessToken::Bearer",
-	#    "refresh_token" : "2e81a67425c2848622ab4965985073f7c74ed191717d79fe3c9b899cde9b607a",
-	#    "access_token"  : "bbb44f7aab09c7dee22a8728a1fb25eb8a15f9cf39c17b2494501020d06b057d"
-	# }
-	#my ($atoken, $rtoken);
-	#if ($token_string =~ /^.*access_token"\s*:\s*"([a-z0-9]+)".*$/) {
-	#	$atoken = $1;
-	#}
-	#if ($token_string =~ /^.*refresh_token"\s*:\s*"([a-z0-9]+)".*$/) {
-	#	$rtoken = $1;
-	#}
-	#if (defined($atoken) && defined($rtoken)) {
-		open(T,">$conf");
-		foreach my $line (($id,$secret,$token_string)) {
-			print T $line."\n";
-		}
-		close(T);
-	#}
+	my $parsed = parse_json($token_string);
+
+	open(T,">$conf");
+	foreach my $line (($id,$secret,$token_string)) {
+		print T $line."\n";
+	}
+	close(T);
 }
 
+sub parse_json {
+	my ($str,$name,$show) = @_;
+
+	my $parsed;
+	eval {
+		$parsed = $json->decode( $str );
+	};
+	if ($@) {
+		die("%s: json->decode('%s') Error %s\n", $name, $str, $@);
+		return undef;
+	}
+	if (!defined($show) || $show eq 1) {
+		printf "Pretty %s: %s\n", $@, $json->pretty->encode( $parsed )."\n";;
+	}
+	return $parsed;
+}
+
+sub show_acct {
+	my ($acct) = @_;
+	printf "     %12.8f %s %s (%s)\n", $acct->{balance}->{amount},
+	    $acct->{balance}->{currency}, $acct->{name}, $acct->{type};
+}
+
+sub by_cur_name {
+	if ($a->{currency} eq $b->{currency}) {
+		return $a->{name} cmp $b->{name};
+	}
+	return $a->{currency} cmp $b->{currency};
+}
 
 package WebService::Coinbase2;
 use Moose;
