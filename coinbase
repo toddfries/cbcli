@@ -172,7 +172,7 @@ if (defined($parsed->{data})) {
 			next;
 		}
 		if (ref($k) eq "ARRAY") {
-			foreach my $l (sort by_cur_name @{$k}) {
+			foreach my $l (@{$k}) {
 				#printf "data: found a %s\n", ref($l);
 				push @accts,$l;
 				$last_cursor_pos++;
@@ -201,7 +201,7 @@ if (!defined($parsed->{pagination}->{next_uri})) {
 }
 
 }
-
+our %seen;
 foreach my $a (sort by_cur_name @accts) {
 	show_acct($a);
 }
@@ -240,7 +240,11 @@ sub parse_json {
 
 sub show_acct {
 	my ($acct) = @_;
-	printf "%26s: %12.8f %s = %8.2f %s (%s)\n",
+	if (defined($seen{$acct->{id}})) {
+		return;
+	}
+	$seen{$acct->{id}}=1;
+	printf "%-26s: %12.8f %s = %8.2f %s (%s)\n",
 	    $acct->{name},
 	    $acct->{balance}->{amount},
 	    $acct->{balance}->{currency},
