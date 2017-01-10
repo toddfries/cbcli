@@ -107,11 +107,12 @@ $token_string = $oauth2->token_string;
 
 if ($oauth2->can_refresh_tokens()) {
 	print "Seems possible to refresh tokens!\n";
-	if ($oauth2->should_refresh()) {
-		print "We shold refresh our tokens..\n";
-	} else {
-		print "No need to refresh tokens yet.\n";
-	}
+	my $ret = $oauth2->should_refresh();
+	#if ($ret) {
+	#	print "We shold refresh our tokens..\n";
+	#} else {
+	#	print "No need to refresh tokens yet.\n";
+	#}
 } else {
 	print "Looks not possible to refresh tokens..\n";
 }
@@ -130,8 +131,8 @@ if (! $res->is_success) {
 	die $res->status_line;
 }
 
-my $parsed = parse_json($res->decoded_content, 0);
-printf "parsed is a %s\n", $parsed;
+my $parsed = parse_json($res->decoded_content, 'GET /accounts', 0);
+#printf "parsed is a %s\n", $parsed;
 
 if (defined($parsed->{pagination})) {
 	foreach my $k (keys %{$parsed->{pagination}}) {
@@ -166,7 +167,7 @@ if (defined($parsed->{data})) {
 
 sub save_tokens {
 	my ($token_string,$id,$secret) = @_;
-	my $parsed = parse_json($token_string);
+	my $parsed = parse_json($token_string, 'token_string');
 
 	open(T,">$conf");
 	foreach my $line (($id,$secret,$token_string)) {
@@ -187,7 +188,7 @@ sub parse_json {
 		return undef;
 	}
 	if (!defined($show) || $show eq 1) {
-		printf "Pretty %s: %s\n", $@, $json->pretty->encode( $parsed )."\n";;
+		printf "Pretty %s: %s\n", $name, $json->pretty->encode( $parsed )."\n";;
 	}
 	return $parsed;
 }
