@@ -27,10 +27,11 @@ our $cbversion = "2017-01-09";
 our $json = JSON->new->allow_nonref;
 
 our $opt_v = 0;
-getopts('v');
+our $opt_c = "$ENV{'HOME'}/.coinbase.conf";
+getopts('c:v');
 
 my ($token_string,$id,$secret,$token_refresh);
-my $conf = "$ENV{'HOME'}/.coinbase.conf";
+my $conf = $opt_c;
 
 open(N,$conf);
 chomp($id = <N>);
@@ -160,7 +161,7 @@ if (! $res->is_success) {
 	die $res->status_line;
 }
 
-my $parsed = parse_json($res->decoded_content, 'GET /accounts', 0);
+my $parsed = parse_json($res->decoded_content, 'GET /accounts');
 #printf "parsed is a %s\n", $parsed;
 
 if (defined($parsed->{data})) {
@@ -222,7 +223,7 @@ sub save_tokens {
 }
 
 sub parse_json {
-	my ($str,$name,$show) = @_;
+	my ($str,$name) = @_;
 
 	my $parsed;
 	eval {
@@ -232,7 +233,7 @@ sub parse_json {
 		die("%s: json->decode('%s') Error %s\n", $name, $str, $@);
 		return undef;
 	}
-	if (!defined($show) || $show eq 1) {
+	if ($opt_v > 0) {
 		printf "Pretty %s: %s\n", $name, $json->pretty->encode( $parsed )."\n";;
 	}
 	return $parsed;
