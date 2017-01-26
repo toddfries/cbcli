@@ -28,7 +28,8 @@ our $json = JSON->new->allow_nonref;
 
 our $opt_v = 0;
 our $opt_c = "$ENV{'HOME'}/.coinbase.conf";
-getopts('c:v');
+our $opt_l;
+getopts('c:l:v');
 
 my ($token_string,$id,$secret,$token_refresh);
 my $conf = $opt_c;
@@ -152,8 +153,6 @@ my $res;
 my $limit = 2;     # 25 (default), 0 - 100
 my $order = "asc"; # desc (newest 1st, default), asc (oldest 1st)
 
-my $last_cursor_pos = 0;
-my $last_cursor_id;
 my @accts;
 
 my @resp = get($urlapibase . '/accounts');
@@ -170,8 +169,6 @@ foreach my $parsed (@resp) {
 				foreach my $l (@{$k}) {
 					#printf "data: found a %s\n", ref($l);
 					push @accts,$l;
-					$last_cursor_pos++;
-					$last_cursor_id=$l->{id};
 				}
 				next;
 			}
@@ -182,21 +179,36 @@ foreach my $parsed (@resp) {
 }
 
 our %seen;
+my $acctcount=0;
 foreach my $a (sort by_cur_name @accts) {
 	show_acct($a);
+	$acctcount++;
+	if (defined($opt_l) && $a->{name} eq $opt_l) {
+		list_acct($a);
+	}
 }
 
-printf "Processed %d accounts\n", $last_cursor_pos;
+printf "Processed %d accounts\n", $acctcount;
 
 1;
 
+sub list_acct {
+	my ($acct) = @_;
+	my @resp = get($urlapibase . '/accounts/' . $acct->{id} . '/transactions');
+	print Dumper([@resp]);
+}
+
 sub get {
 	my ($url) = @_;
+
+	print "get('$url') called\n";
 
 	my %headers;
 	$headers{'CB-VERSION'}=$cbversion;
 
 	my @responses;
+	my $last_cursor_pos = 0;
+	my $last_cursor_id;
 
     while(1) {
 	if ($opt_v > 0) {
@@ -217,6 +229,7 @@ sub get {
 		die "get ${url}${parms} failed!";
 	}
 	if (! $res->is_success) {
+		print Dumper($res);
 		die $res->status_line;
 	}
 
