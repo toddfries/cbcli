@@ -64,7 +64,7 @@ my $oauth2 = LWP::Authen::OAuth2->new(
 	# have to create LWP::Authen::OAuth2::CoinBase
 	#service_provider => 'CoinBase',
 	# - vs - 
-	authorization_endpoint => $authurl."?account=all",
+	authorization_endpoint => $authurl,
 	token_endpoint => $tokenurl."?redirect_uri=$oobredir",
 
 	redirect_uri => $oobredir,
@@ -75,13 +75,28 @@ my $oauth2 = LWP::Authen::OAuth2->new(
 	token_string => $token_string,
 );
 
+my @scopes = (
+	"wallet:user:read",
+	"wallet:accounts:read",
+	"wallet:transactions:read",
+);
+
 if (!defined($token_string)) {
+	my $scope;
+	foreach my $s (@scopes) {
+		if (defined($scope)) {
+			$scope .= ",".$s;
+		} else {
+			$scope = $s;
+		}
+	}
 	my $url = $oauth2->authorization_url(
 		response_type=> 'code',
 		client_id => $id,
 		state => $randstate,
-		scope => "wallet:user:read,wallet:accounts:read",
+		scope => $scope,
 	);
+	$url .= "&account=all";
 
 	if (defined($ENV{'DISPLAY'}) && -f "/usr/local/bin/firefox") {
 		system("/usr/local/bin/firefox \"$url\"");
@@ -129,8 +144,6 @@ if ($oauth2->can_refresh_tokens()) {
 	print "Looks not possible to refresh tokens..\n";
 }
 
-my %headers;
-$headers{'CB-VERSION'}=$cbversion;
 
 my $res;
 # XXX check before we fail below?
@@ -142,31 +155,9 @@ my $order = "asc"; # desc (newest 1st, default), asc (oldest 1st)
 my $last_cursor_pos = 0;
 my $last_cursor_id;
 my @accts;
-while(1) {
-	if ($opt_v > 0) {
-		printf "Starting round after %d items", $last_cursor_pos;
-		if (defined($last_cursor_id)) {
-			printf " after id %s", $last_cursor_id;
-		}
-		print "\n";
-	}
 
-	my $parms = "?limit=${limit}&order=${order}";
-	if (defined($last_cursor_id)) {
-		$parms.="&starting_after=${last_cursor_id}";
-	}
-
-	$res = $oauth2->get($urlapibase . '/accounts'.${parms}, %headers);
-	if (!defined($res)) {
-		die "get /accounts failed!";
-	}
-	if (! $res->is_success) {
-		die $res->status_line;
-	}
-
-	my $parsed = parse_json($res->decoded_content, 'GET /accounts');
-	#printf "parsed is a %s\n", $parsed;
-
+my @resp = get($urlapibase . '/accounts');
+foreach my $parsed (@resp) {
 	if (defined($parsed->{data})) {
 		foreach my $k ($parsed->{data}) {
 			if (ref($k) eq "HASH") {
@@ -188,22 +179,70 @@ while(1) {
 			$i++;
 		}
 	}
+}
+
+sub get {
+	my ($url) = @_;
+
+	my %headers;
+	$headers{'CB-VERSION'}=$cbversion;
+
+	my @responses;
+
+    while(1) {
 	if ($opt_v > 0) {
-	if (defined($parsed->{pagination})) {
-		foreach my $k (keys %{$parsed->{pagination}}) {
-			my $val = $parsed->{pagination}->{$k};
-			if (!defined($val)) {
-				$val = "</dev/null>";
+		printf "Starting round after %d items", $last_cursor_pos;
+		if (defined($last_cursor_id)) {
+			printf " after id %s", $last_cursor_id;
+		}
+		print "\n";
+	}
+
+	my $parms = "?limit=${limit}&order=${order}";
+	if (defined($last_cursor_id)) {
+		$parms.="&starting_after=${last_cursor_id}";
+	}
+
+	$res = $oauth2->get(${url}.${parms}, %headers);
+	if (!defined($res)) {
+		die "get ${url}${parms} failed!";
+	}
+	if (! $res->is_success) {
+		die $res->status_line;
+	}
+
+	my $parsed = parse_json($res->decoded_content, 'GET ${url}${parms}');
+	#printf "parsed is a %s\n", $parsed;
+	push @responses, $parsed;
+
+	if ($opt_v > 0) {
+		if (defined($parsed->{pagination})) {
+			foreach my $k (keys %{$parsed->{pagination}}) {
+				my $val = $parsed->{pagination}->{$k};
+				if (!defined($val)) {
+					$val = "</dev/null>";
+				}
+				printf "pagination %s : %s\n", $k, $val;
 			}
-			printf "pagination %s : %s\n", $k, $val;
 		}
 	}
-}
+	if (defined($parsed->{data})) {
+		foreach my $k ($parsed->{data}) {
+			if (ref($k) eq "ARRAY") {
+				foreach my $l (@{$k}) {
+					$last_cursor_pos++;
+					$last_cursor_id=$l->{id};
+				}
+				next;
+			}
+		}
+	}
 
-if (!defined($parsed->{pagination}->{next_uri})) {
-	last;
-}
-
+	if (!defined($parsed->{pagination}->{next_uri})) {
+		last;
+	}
+    }
+    return @responses;
 }
 our %seen;
 foreach my $a (sort by_cur_name @accts) {
