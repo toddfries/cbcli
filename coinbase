@@ -181,6 +181,15 @@ foreach my $parsed (@resp) {
 	}
 }
 
+our %seen;
+foreach my $a (sort by_cur_name @accts) {
+	show_acct($a);
+}
+
+printf "Processed %d accounts\n", $last_cursor_pos;
+
+1;
+
 sub get {
 	my ($url) = @_;
 
@@ -244,14 +253,6 @@ sub get {
     }
     return @responses;
 }
-our %seen;
-foreach my $a (sort by_cur_name @accts) {
-	show_acct($a);
-}
-
-printf "Processed %d accounts\n", $last_cursor_pos;
-
-1;
 
 sub save_tokens {
 	my ($token_string,$id,$secret) = @_;
