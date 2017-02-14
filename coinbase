@@ -317,11 +317,16 @@ sub show_acct {
 }
 
 sub order_accts {
-	# XXX order by currency first then if the same, do by name
-	if ($a->{currency} eq $b->{currency}) {
-		return $a->{name} cmp $b->{name};
+	my $res;
+	$res = $a->{type} cmp $b->{type};
+	if ($res != 0) {
+		return $res*-1;
 	}
-	return $a->{currency} cmp $b->{currency};
+	$res = $a->{currency} cmp $b->{currency};
+	if ($res != 0) {
+		return $res;
+	}
+	return $a->{name} cmp $b->{name};
 }
 
 package WebService::Coinbase2;
