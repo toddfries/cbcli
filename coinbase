@@ -178,17 +178,23 @@ foreach my $parsed (@resp) {
 	}
 }
 
+# XXX totals, but must account for different currencies,
+# looking for total in btc then conversion to usd of course
 our %seen;
 my $acctcount=0;
-foreach my $a (sort by_cur_name @accts) {
+my $nativetotal=0.0;
+my $nativename="";
+foreach my $a (sort order_accts @accts) {
 	show_acct($a);
+	$nativetotal+= $a->{native_balance}->{amount};
+	$nativename = $a->{native_balance}->{currency};
 	$acctcount++;
 	if (defined($opt_l) && $a->{name} eq $opt_l) {
 		list_acct($a);
 	}
 }
 
-printf "Processed %d accounts\n", $acctcount;
+printf "Processed %d accounts ... total %s %s\n", $acctcount, $nativetotal, $nativename;
 
 1;
 
@@ -310,7 +316,8 @@ sub show_acct {
 	    $acct->{type};
 }
 
-sub by_cur_name {
+sub order_accts {
+	# XXX order by currency first then if the same, do by name
 	if ($a->{currency} eq $b->{currency}) {
 		return $a->{name} cmp $b->{name};
 	}
