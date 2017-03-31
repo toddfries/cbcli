@@ -307,13 +307,19 @@ sub show_acct {
 		return;
 	}
 	$seen{$acct->{id}}=1;
-	printf "%-26s: %12.8f %s = %8.2f %s (%s)\n",
+	my $usdbtc = 0;
+	if ($acct->{balance}->{amount} > 0) {
+		$usdbtc = $acct->{native_balance}->{amount} /
+			$acct->{balance}->{amount};
+	}
+	printf "%-26s: %12.8f %s = %8.2f %s (%s), %0.2f USD/1BTC\n",
 	    $acct->{name},
 	    $acct->{balance}->{amount},
 	    $acct->{balance}->{currency},
 	    $acct->{native_balance}->{amount},
 	    $acct->{native_balance}->{currency},
-	    $acct->{type};
+	    $acct->{type},
+	    $usdbtc;
 }
 
 sub order_accts {
