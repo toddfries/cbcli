@@ -26,10 +26,18 @@ our $cbversion = "2017-01-09";
 
 our $json = JSON->new->allow_nonref;
 
+# -v		verbose
+# -c <file> 	config file
+# -l <acctname>	list transactions for account name
+# -b <info>	button creation
+#               <amount>:<currency>:<name>:<description>
+#               e.g. 10.00:USD:Invoice 1234:Bitcoin payment for Invoice 1234, Free Daemon Consulting, LLC
+
 our $opt_v = 0;
 our $opt_c = "$ENV{'HOME'}/.coinbase.conf";
 our $opt_l;
-getopts('c:l:v');
+our $opt_b;
+getopts('b:c:l:v');
 
 my ($token_string,$id,$secret,$token_refresh);
 my $conf = $opt_c;
@@ -77,9 +85,13 @@ my $oauth2 = LWP::Authen::OAuth2->new(
 );
 
 my @scopes = (
-	"wallet:user:read",
 	"wallet:accounts:read",
+	"wallet:checkouts:read",
+	"wallet:checkouts:create",
+	#"wallet:orders:read",
+	#"wallet:orders:create",
 	"wallet:transactions:read",
+	"wallet:user:read",
 );
 
 if (!defined($token_string)) {
@@ -122,7 +134,7 @@ if (!defined($token_string)) {
 	}
 
 	#print(Dumper $res);
-	print "\n";
+	#print "\n";
 }
 
 $token_string = $oauth2->token_string;
@@ -153,6 +165,61 @@ my $res;
 my $limit = 2;     # 25 (default), 0 - 100
 my $order = "asc"; # desc (newest 1st, default), asc (oldest 1st)
 
+if (defined($opt_b)) {
+	my ($amount, $currency, $name, $description) = split(/:/,$opt_b);
+
+	my $parms = { };
+	
+	$parms->{'amount'} = $amount;
+	$parms->{'currency'} = $currency;
+	$parms->{'name'} = $name;
+	$parms->{'description'} = $description;
+
+	my %headers;
+	$headers{'CB-VERSION'}=$cbversion;
+
+	my $res;
+	eval {
+		$res = $oauth2->post($urlapibase . '/checkouts', $parms,
+		    %headers);
+	};
+	if ($@) {
+		print STDERR "checkouts: ".$@."\n";
+		exit(1);
+	}
+
+	if (!defined($res)) {
+		die "post ${urlapibase}/checkouts failed!";
+	}
+	if (! $res->is_success) {
+		my $content = $res->decoded_content;
+		if (defined($content)) {
+			my $parsed = parse_json($content, 'fail');
+			my ($url,$id,$msg) = (
+				${$parsed->{errors}}[0]->{url},
+				${$parsed->{errors}}[0]->{id},
+				${$parsed->{errors}}[0]->{message},
+			);
+			if (defined($id)&&defined($url)&&defined($msg)) {
+				print "id=$id msg=$msg url=$url\n";
+			} else {
+				print Dumper($res);
+			}
+			die "not success!";
+		}
+		print Dumper($res);
+		die "not success!";
+	}
+	my $parsed = parse_json($res->decoded_content,
+		'POST ${urlapibase}/checkouts');
+	
+	if (defined($parsed->{data}->{embed_code})) {
+		print $parsed->{data}->{embed_code}."\n";
+		exit(0);
+	}
+	print Dumper($res);
+	die("no embed code found, blah");
+}
 my @accts;
 
 my @resp = get($urlapibase . '/accounts');
